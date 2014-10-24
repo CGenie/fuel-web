@@ -329,7 +329,10 @@ class LogEntryCollectionHandler(BaseHandler):
         return {
             'date_after': date_after,
             'date_before': date_before,
+            'level': level,
+            'log_file': log_file,
             'log_config': log_config,
+            'max_entries': max_entries,
             'node': node,
             'regexp': regexp,
             'truncate_log': truncate_log,
