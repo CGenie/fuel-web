@@ -9,20 +9,18 @@ def test_astute_performance():
     log_file = 'astute.log'
     log_config = [log for log in settings.LOGS if log['id'] == 'astute'][0]
 
-    max_entries = 2000
+    max_entries = 100000
     regexp = re.compile(log_config['regexp'])
 
     read_log(
         log_file,
         log_config=log_config,
         max_entries=max_entries,
-        regexp=regexp,
-        with_strptime=False
+        regexp=regexp
     )
 
 
 if __name__ == '__main__':
     start = time.time()
-    for x in xrange(50):
-        test_astute_performance()
+    test_astute_performance()
     print time.time() - start

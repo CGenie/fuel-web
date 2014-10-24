@@ -70,6 +70,14 @@ def read_backwards(file, bufsize=4096):
             return
 
 
+STRPTIME_PERFORMANCE_HACK = {}
+if settings.UI_LOG_DATE_FORMAT == '%Y-%m-%d %H:%M:%S':
+    STRPTIME_PERFORMANCE_HACK = {
+        '%Y-%m-%dT%H:%M:%S': lambda date: date.replace('T', ' '),
+        '%Y-%m-%d %H:%M:%S': lambda date: date,
+    }
+
+
 def read_log(
         log_file,
         level=None,
@@ -77,9 +85,7 @@ def read_log(
         max_entries=None,
         regexp=None,
         to_byte=0,
-        truncate_log=True,
-
-        with_strptime=True):
+        truncate_log=True):
     has_more = False
     entries = []
     log_date_format = log_config['date_format']
@@ -92,6 +98,14 @@ def read_log(
                                         log_config['levels']))
 
     log_file_size = os.stat(log_file).st_size
+
+    if log_date_format in STRPTIME_PERFORMANCE_HACK:
+        strptime_function = STRPTIME_PERFORMANCE_HACK[log_date_format]
+    else:
+        strptime_function = lambda date: time.strftime(
+            settings.UI_LOG_DATE_FORMAT,
+            time.strptime(date, log_date_format)
+        )
 
     with open(log_file, 'r') as f:
         f.seek(0, 2)
@@ -127,10 +141,7 @@ def read_log(
             if level and not (entry_level in allowed_levels):
                 continue
             try:
-                if with_strptime:
-                    entry_date = time.strptime(m.group('date'), log_date_format)
-                else:
-                    entry_date = m.group('date')
+                entry_date = strptime_function(m.group('date'))
             except ValueError:
                 logger.debug("Unable to parse date from log entry."
                              " Date format: %r, date part of entry: %r",
@@ -138,20 +149,12 @@ def read_log(
                              m.group('date'))
                 continue
 
-            if with_strptime:
-                app = [
-                    time.strftime(settings.UI_LOG_DATE_FORMAT, entry_date),
-                    entry_level,
-                    entry_text
-                ]
-            else:
-                app = [
-                    entry_date,
-                    entry_level,
-                    entry_text
-                ]
+            entries.append([
+                entry_date,
+                entry_level,
+                entry_text
+            ])
 
-            entries.append(app)
             if truncate_log and len(entries) >= max_entries:
                 has_more = True
                 break
