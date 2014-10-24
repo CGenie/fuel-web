@@ -16,7 +16,8 @@ def test_astute_performance():
         log_file,
         log_config=log_config,
         max_entries=max_entries,
-        regexp=regexp
+        regexp=regexp,
+        with_strptime=False
     )
 
 

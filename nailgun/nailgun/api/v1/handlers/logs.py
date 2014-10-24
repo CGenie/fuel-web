@@ -77,7 +77,9 @@ def read_log(
         max_entries=None,
         regexp=None,
         to_byte=0,
-        truncate_log=True):
+        truncate_log=True,
+
+        with_strptime=True):
     has_more = False
     entries = []
     log_date_format = log_config['date_format']
@@ -125,7 +127,10 @@ def read_log(
             if level and not (entry_level in allowed_levels):
                 continue
             try:
-                entry_date = time.strptime(m.group('date'), log_date_format)
+                if with_strptime:
+                    entry_date = time.strptime(m.group('date'), log_date_format)
+                else:
+                    entry_date = m.group('date')
             except ValueError:
                 logger.debug("Unable to parse date from log entry."
                              " Date format: %r, date part of entry: %r",
@@ -133,11 +138,20 @@ def read_log(
                              m.group('date'))
                 continue
 
-            entries.append([
-                time.strftime(settings.UI_LOG_DATE_FORMAT, entry_date),
-                entry_level,
-                entry_text
-            ])
+            if with_strptime:
+                app = [
+                    time.strftime(settings.UI_LOG_DATE_FORMAT, entry_date),
+                    entry_level,
+                    entry_text
+                ]
+            else:
+                app = [
+                    entry_date,
+                    entry_level,
+                    entry_text
+                ]
+
+            entries.append(app)
             if truncate_log and len(entries) >= max_entries:
                 has_more = True
                 break
