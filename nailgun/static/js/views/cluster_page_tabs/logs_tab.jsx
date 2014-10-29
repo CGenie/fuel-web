@@ -113,7 +113,7 @@ function(React, utils, models, componentMixins, controls) {
         onShowMoreClick: function(value) {
             var options = {
                 truncate_log: true,
-                max_entries: parseInt(value, 10),
+                max_entries: value,
                 fetch_older: true,
                 from: this.state.from
             };
@@ -361,11 +361,7 @@ function(React, utils, models, componentMixins, controls) {
     });
 
     var LogsTable = React.createClass({
-        handleShowMoreClick: function(value) {
-            return _.bind(function(e) {
-                return this.props.onShowMoreClick(value);
-            }, this);
-        },
+        handleShowMoreClick: function(value) { return this.props.onShowMoreClick(value); },
         render: function() {
             var tabRows = [],
                 logsEntries = this.props.logsEntries;
@@ -397,7 +393,7 @@ function(React, utils, models, componentMixins, controls) {
                                 <td colSpan='3'>
                                     <span>{$.t('cluster_page.logs_tab.bottom_text')}
                                     </span>: {[100, 500, 1000, 5000].map(function(count) {
-                                        return <span className='show-more-entries' onClick={this.handleShowMoreClick(count)} key={count}> {count} </span>;
+                                        return <span className='show-more-entries' onClick={_.bind(this.handleShowMoreClick, this, count)} key={count}> {count} </span>;
                                     }, this)}
                                 </td>
                             </tr>
