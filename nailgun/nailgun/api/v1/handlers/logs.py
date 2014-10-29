@@ -84,8 +84,10 @@ def read_log(
         log_config={},
         max_entries=None,
         regexp=None,
+        from_byte=-1,
+        fetch_older=False,
         to_byte=0,
-        truncate_log=True):
+        **kwargs):
     has_more = False
     entries = []
     log_date_format = log_config['date_format']
@@ -108,14 +110,17 @@ def read_log(
         )
 
     with open(log_file, 'r') as f:
-        f.seek(0, 2)
+        if from_byte != -1 and fetch_older:
+            f.seek(from_byte)
+        else:
+            f.seek(0, 2)
         # we need to calculate current position manually instead of using
         # tell() because read_backwards uses buffering
         pos = f.tell()
         multilinebuf = []
         for line in read_backwards(f):
             pos -= len(line)
-            if not truncate_log and pos < to_byte:
+            if not fetch_older and pos < to_byte:
                 has_more = pos > 0
                 break
             entry = line.rstrip('\n')
@@ -155,12 +160,18 @@ def read_log(
                 entry_text
             ])
 
-            if truncate_log and len(entries) >= max_entries:
+            if len(entries) >= max_entries:
                 has_more = True
                 break
 
+        if fetch_older or (not fetch_older and from_byte == -1):
+            from_byte = pos
+            if from_byte == 0:
+                has_more = False
+
     return {
         'entries': entries,
+        'from': from_byte,
         'to': log_file_size,
         'has_more': has_more,
     }
@@ -201,31 +212,22 @@ class LogEntryCollectionHandler(BaseHandler):
         """
         data = self.read_and_validate_data()
 
-        level = data['level']
-        log_config = data['log_config']
         log_file = data['log_file']
-        max_entries = data['max_entries']
-        regexp = data['regexp']
+        fetch_older = data['fetch_older']
+        from_byte = data['from_byte']
         to_byte = data['to_byte']
-        truncate_log = data['truncate_log']
 
         log_file_size = os.stat(log_file).st_size
-        if to_byte >= log_file_size:
+        if (not fetch_older and to_byte >= log_file_size) or \
+                (fetch_older and from_byte == 0):
             return jsonutils.dumps({
                 'entries': [],
+                'from': from_byte,
                 'to': log_file_size,
                 'has_more': False,
             })
 
-        return read_log(
-            log_file,
-            level=level,
-            log_config=log_config,
-            max_entries=max_entries,
-            regexp=regexp,
-            to_byte=to_byte,
-            truncate_log=truncate_log
-        )
+        return read_log(log_file, **data)
 
     def read_and_validate_data(self):
         user_data = web.input()
@@ -238,8 +240,25 @@ class LogEntryCollectionHandler(BaseHandler):
             max_entries = int(user_data.get('max_entries',
                                             settings.TRUNCATE_LOG_ENTRIES))
         except ValueError:
-            logger.debug("Invalid 'max_entries' value: %d", max_entries)
+            logger.debug("Invalid 'max_entries' value: %d",
+                         user.data.get('max_entries'))
             raise self.http(400, "Invalid 'max_entries' value")
+
+        from_byte = None
+        try:
+            from_byte = int(user_data.get('from', -1))
+        except ValueError:
+            logger.debug("Invalid 'from' value: %d", user_data.get('from'))
+            raise self.http(400, "Invalid 'from' value")
+
+        to_byte = None
+        try:
+            to_byte = int(user_data.get('to', 0))
+        except ValueError:
+            logger.debug("Invalid 'to' value: %d", user_data.get('to'))
+            raise self.http(400, "Invalid 'to' value")
+
+        fetch_older = bool(user_data.get('fetch_older', False))
 
         date_before = user_data.get('date_before')
         if date_before:
@@ -258,8 +277,6 @@ class LogEntryCollectionHandler(BaseHandler):
             except ValueError:
                 logger.debug("Invalid 'date_after' value: %s", date_after)
                 raise self.http(400, "Invalid 'date_after' value")
-
-        truncate_log = bool(user_data.get('truncate_log'))
 
         log_config = filter(lambda lc: lc['id'] == user_data.get('source'),
                             settings.LOGS)
@@ -319,13 +336,6 @@ class LogEntryCollectionHandler(BaseHandler):
                          log_config['id'], e)
             raise self.http(500, "Invalid regular expression in config")
 
-        to_byte = None
-        try:
-            to_byte = int(user_data.get('to', 0))
-        except ValueError:
-            logger.debug("Invalid 'to' value: %d", to_byte)
-            raise self.http(400, "Invalid 'to' value")
-
         return {
             'date_after': date_after,
             'date_before': date_before,
@@ -335,7 +345,9 @@ class LogEntryCollectionHandler(BaseHandler):
             'max_entries': max_entries,
             'node': node,
             'regexp': regexp,
-            'truncate_log': truncate_log,
+
+            'fetch_older': fetch_older,
+            'from_byte': from_byte,
             'to_byte': to_byte,
         }
 
