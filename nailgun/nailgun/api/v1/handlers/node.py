@@ -69,6 +69,11 @@ class NodeCollectionHandler(CollectionHandler):
         :returns: Collection of JSONized Node objects.
         :http: * 200 (OK)
         """
+        from nailgun import generate_sample_env
+
+        nodes = generate_sample_env.get_sample_environment()
+        return self.collection.to_json(nodes)
+
         cluster_id = web.input(cluster_id=None).cluster_id
         nodes = self.collection.eager_nodes_handlers(None)
 
